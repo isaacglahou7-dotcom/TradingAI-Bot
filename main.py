@@ -1,5 +1,6 @@
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters
+import asyncio
 
 TOKEN = "TON_TOKEN_BOTFATHER"
 
@@ -13,14 +14,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def analyse_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    photo = update.message.photo[-1]
-
     await update.message.reply_text(
         "📊 Image reçue !\n\n"
         "🔎 Analyse du graphique en cours..."
     )
 
-    # On ajoutera ici l'intelligence artificielle
+    # Intelligence artificielle sera ajoutée ici
 
 
 app = ApplicationBuilder().token(TOKEN).build()
@@ -31,6 +30,16 @@ app.add_handler(
     MessageHandler(filters.PHOTO, analyse_image)
 )
 
-print("🤖 Bot démarré...")
 
-app.run_polling()
+async def main():
+    print("🤖 Bot démarré...")
+
+    await app.initialize()
+    await app.start()
+    await app.updater.start_polling()
+
+    await asyncio.Event().wait()
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
