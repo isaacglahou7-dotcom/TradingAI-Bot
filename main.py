@@ -1,33 +1,19 @@
 from telegram import Update
-from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters
+from telegram.ext import (
+    ApplicationBuilder,
+    CommandHandler,
+    MessageHandler,
+    ContextTypes,
+    filters
+)
 
 import asyncio
 import os
 
 from aiohttp import web
-from huggingface_hub import InferenceClient
-from PIL import Image
 
-
-# =========================
-# VARIABLES
-# =========================
-
-TOKEN = os.getenv("BOT_TOKEN", "").replace("\n", "").replace("\r", "").strip()
-
-HF_TOKEN = os.getenv("HF_TOKEN", "").replace("\n", "").replace("\r", "").strip()
-
-
-if not TOKEN:
-    raise ValueError("❌ BOT_TOKEN manquant dans Render")
-
-if not HF_TOKEN:
-    raise ValueError("❌ HF_TOKEN manquant dans Render")
-
-
-client = InferenceClient(
-    token=HF_TOKEN
-)
+from config import BOT_TOKEN, PORT, check_config
+from vision import analyse_graphique
 
 
 # =========================
@@ -37,83 +23,67 @@ client = InferenceClient(
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(
-        "🤖 Trading AI Bot en ligne !\n\n"
+        "🤖 Trading AI Bot PRO en ligne !\n\n"
         "📸 Envoie ton graphique.\n\n"
         "Je vais analyser :\n"
         "📈 Tendance\n"
+        "🟢 BUY / 🔴 SELL\n"
         "🎯 Entrée\n"
         "🛑 Stop Loss\n"
-        "✅ Take Profit\n"
+        "✅ TP1 / TP2 / TP3\n"
         "📊 Confiance"
     )
 
 
 # =========================
-# ANALYSE IMAGE
+# IMAGE
 # =========================
 
 async def analyse_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(
-        "📊 Image reçue !\n\n"
-        "🔎 Analyse IA en cours..."
+        "📸 Graphique reçu.\n\n"
+        "🧠 Analyse IA en préparation..."
     )
-
-
-    photo = update.message.photo[-1]
-
-    file = await context.bot.get_file(photo.file_id)
-
-    image_path = "graphique.png"
-
-
-    await file.download_to_drive(image_path)
 
 
     try:
 
-        image = Image.open(image_path)
+        photo = update.message.photo[-1]
 
-
-        await update.message.reply_text(
-            "🖼️ Image chargée.\n"
-            "🧠 Interrogation IA..."
+        file = await context.bot.get_file(
+            photo.file_id
         )
 
 
-        result = client.image_to_text(
-            image,
-            model="Salesforce/blip-image-captioning-large"
+        image_path = "graphique.png"
+
+
+        await file.download_to_drive(
+            image_path
         )
 
 
-        if not result:
-
-            await update.message.reply_text(
-                "⚠️ L'IA n'a retourné aucune analyse."
-            )
-
-            return
+        await update.message.reply_text(
+            "🔍 Image chargée.\n"
+            "📊 Analyse du marché..."
+        )
 
 
-        description = result[0].generated_text
-
-
-        if not description:
-
-            description = "Aucune description reçue."
+        resultat = await analyse_graphique(
+            image_path
+        )
 
 
         await update.message.reply_text(
-            "🧠 ANALYSE IA :\n\n"
-            + description
+            resultat
         )
 
 
     except Exception as e:
 
         await update.message.reply_text(
-            "❌ Erreur IA :\n"
+            "❌ Erreur analyse :\n"
             f"{type(e).__name__}\n"
             f"{str(e)}"
         )
@@ -124,42 +94,35 @@ async def analyse_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # PORT RENDER
 # =========================
 
-async def health_check(request):
+async def health(request):
 
     return web.Response(
-        text="Trading AI Bot OK"
+        text="Trading AI Bot PRO OK"
     )
 
 
-async def start_web_server():
+async def start_server():
 
-    app_web = web.Application()
+    server = web.Application()
 
-    app_web.router.add_get(
+    server.router.add_get(
         "/",
-        health_check
+        health
     )
 
 
-    runner = web.AppRunner(app_web)
+    runner = web.AppRunner(
+        server
+    )
 
     await runner.setup()
-
-
-    port = int(
-        os.environ.get(
-            "PORT",
-            10000
-        )
-    )
 
 
     site = web.TCPSite(
         runner,
         "0.0.0.0",
-        port
+        PORT
     )
-
 
     await site.start()
 
@@ -169,7 +132,9 @@ async def start_web_server():
 # TELEGRAM
 # =========================
 
-app = ApplicationBuilder().token(TOKEN).build()
+app = ApplicationBuilder().token(
+    BOT_TOKEN
+).build()
 
 
 app.add_handler(
@@ -191,10 +156,14 @@ app.add_handler(
 
 async def main():
 
-    print("🤖 Bot démarré...")
+    check_config()
+
+    print(
+        "🤖 Trading AI Bot PRO démarré..."
+    )
 
 
-    await start_web_server()
+    await start_server()
 
 
     await app.initialize()
