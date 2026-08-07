@@ -1,8 +1,12 @@
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters
 import asyncio
+import os
 
-TOKEN = "TON_TOKEN_BOTFATHER"
+TOKEN = os.getenv("BOT_TOKEN")
+
+if not TOKEN:
+    raise ValueError("❌ BOT_TOKEN manquant dans les variables Render")
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
