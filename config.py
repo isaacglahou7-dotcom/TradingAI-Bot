@@ -2,34 +2,43 @@ import os
 
 
 # =========================
-# CONFIGURATION BOT
+# TELEGRAM
 # =========================
 
 BOT_TOKEN = os.getenv("BOT_TOKEN", "").strip()
 
 
 # =========================
-# IA
+# GEMINI IA
 # =========================
 
-HF_TOKEN = os.getenv("HF_TOKEN", "").strip()
+GEMINI_API_KEY = os.getenv(
+    "GEMINI_API_KEY",
+    ""
+).strip()
 
 
 # =========================
 # RENDER
 # =========================
 
-PORT = int(os.getenv("PORT", 10000))
+PORT = int(
+    os.getenv(
+        "PORT",
+        10000
+    )
+)
 
 
 def check_config():
 
     if not BOT_TOKEN:
         raise ValueError(
-            "❌ BOT_TOKEN manquant dans Render"
+            "❌ BOT_TOKEN manquant"
         )
 
-    if not HF_TOKEN:
+
+    if not GEMINI_API_KEY:
         raise ValueError(
-            "❌ HF_TOKEN manquant dans Render"
+            "❌ GEMINI_API_KEY manquant"
         )
