@@ -6,6 +6,7 @@ import os
 
 from aiohttp import web
 from huggingface_hub import InferenceClient
+from PIL import Image
 
 
 # =========================
@@ -24,15 +25,13 @@ if not HF_TOKEN:
     raise ValueError("❌ HF_TOKEN manquant dans Render")
 
 
-# Client IA Hugging Face
-
 client = InferenceClient(
     token=HF_TOKEN
 )
 
 
 # =========================
-# COMMAND START
+# START
 # =========================
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -50,22 +49,20 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 # =========================
-# ANALYSE IMAGE
+# IMAGE ANALYSE
 # =========================
 
 async def analyse_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(
         "📊 Image reçue !\n\n"
-        "🔎 Analyse IA en cours..."
+        "🔎 Téléchargement du graphique..."
     )
 
 
     photo = update.message.photo[-1]
 
-
     file = await context.bot.get_file(photo.file_id)
-
 
     image_path = "graphique.png"
 
@@ -73,65 +70,32 @@ async def analyse_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await file.download_to_drive(image_path)
 
 
+    await update.message.reply_text(
+        "✅ Graphique enregistré.\n\n"
+        "🧠 Préparation analyse IA..."
+    )
+
+
     try:
 
         image = Image.open(image_path)
 
 
-        prompt = """
-Analyse cette capture de graphique de trading.
-
-Donne une analyse professionnelle :
-
-- Actif détecté
-- Tendance actuelle
-- Support et résistance
-- Signal BUY ou SELL
-- Prix d'entrée estimé
-- Stop Loss
-- TP1 TP2 TP3
-- Ratio risque/rendement
-- Niveau de confiance en %
-
-Réponds en français avec un format clair.
-"""
-
-
-        # Analyse IA (modèle vision à définir)
-
-        result = client.chat_completion(
-            model="Qwen/Qwen2.5-VL-7B-Instruct",
-            messages=[
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "text",
-                            "text": prompt
-                        },
-                        {
-                            "type": "image",
-                            "image": image
-                        }
-                    ]
-                }
-            ]
-        )
-
-
-        response = result.choices[0].message.content
-
-
         await update.message.reply_text(
-            "🧠 ANALYSE IA :\n\n" + response
+            "🔍 Image chargée correctement.\n"
+            "🤖 Connexion IA en préparation..."
         )
+
+
+        # Analyse IA sera activée ici
 
 
     except Exception as e:
 
         await update.message.reply_text(
-            f"❌ Erreur analyse IA :\n{e}"
+            f"❌ Erreur analyse image :\n{e}"
         )
+
 
 
 # =========================
@@ -143,6 +107,7 @@ async def health_check(request):
     return web.Response(
         text="Trading AI Bot OK"
     )
+
 
 
 async def start_web_server():
