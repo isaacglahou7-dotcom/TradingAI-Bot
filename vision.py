@@ -1,98 +1,92 @@
-import base64
-import requests
+import google.generativeai as genai
+from PIL import Image
 
-from config import HF_TOKEN
+from config import GEMINI_API_KEY
 from trading import format_analyse
 
 
 # =========================
-# ANALYSE IMAGE IA
+# CONFIG GEMINI
+# =========================
+
+genai.configure(
+    api_key=GEMINI_API_KEY
+)
+
+
+model = genai.GenerativeModel(
+    "gemini-1.5-flash"
+)
+
+
+
+# =========================
+# ANALYSE GRAPHIQUE
 # =========================
 
 async def analyse_graphique(image_path):
 
     try:
 
-        with open(
-            image_path,
-            "rb"
-        ) as image_file:
-
-            image_bytes = image_file.read()
-
-
-        image_base64 = base64.b64encode(
-            image_bytes
-        ).decode()
-
-
-        headers = {
-            "Authorization": f"Bearer {HF_TOKEN}",
-            "Content-Type": "application/json"
-        }
-
-
-        payload = {
-
-            "inputs": image_base64,
-
-            "parameters": {
-
-                "prompt":
-                """
-Tu es un analyste Forex professionnel.
-
-Analyse ce graphique.
-
-Donne :
-
-- Actif
-- Tendance
-- BUY ou SELL
-- Zone d'entrée
-- Stop Loss
-- TP1 TP2 TP3
-- Confiance %
-- Raisons techniques
-
-Réponds en français.
-"""
-            }
-        }
-
-
-        response = requests.post(
-
-            "https://api-inference.huggingface.co/models/Qwen/Qwen2.5-VL-7B-Instruct",
-
-            headers=headers,
-
-            json=payload,
-
-            timeout=60
+        image = Image.open(
+            image_path
         )
 
 
-        data = response.json()
+        prompt = """
+Tu es un analyste professionnel Forex.
+
+Analyse cette capture de graphique.
+
+Donne une analyse structurée :
+
+📌 Actif détecté :
+📈 Tendance :
+📊 Structure du marché :
+🟢 Signal : BUY ou SELL
+🎯 Zone d'entrée :
+🛑 Stop Loss :
+✅ TP1 :
+✅ TP2 :
+✅ TP3 :
+📊 Confiance en % :
+
+Explique les raisons :
+- Supports/Résistances
+- Tendances
+- Figures chartistes
+- Indicateurs visibles
+
+Réponds en français.
+
+Ne donne pas de certitude absolue.
+"""
 
 
-        if isinstance(data, dict) and "error" in data:
+        response = model.generate_content(
+            [
+                prompt,
+                image
+            ]
+        )
+
+
+        if not response.text:
 
             return (
-                "⚠️ IA indisponible actuellement.\n\n"
-                + data["error"]
+                "⚠️ Gemini n'a pas retourné d'analyse."
             )
 
 
         return format_analyse(
-            str(data)
+            response.text
         )
 
 
     except Exception as e:
 
         return (
-            "❌ Erreur moteur vision :\n"
+            "❌ Erreur Gemini Vision :\n"
             f"{type(e).__name__}\n"
             f"{str(e)}"
         )
