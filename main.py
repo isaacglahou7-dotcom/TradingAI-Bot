@@ -66,6 +66,7 @@ async def analyse_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     image_path = "graphique.png"
 
+
     await file.download_to_drive(image_path)
 
 
@@ -76,28 +77,9 @@ async def analyse_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         await update.message.reply_text(
             "🖼️ Image chargée.\n"
-            "🧠 Connexion au modèle IA..."
+            "🧠 Interrogation IA..."
         )
 
-
-        prompt = """
-Analyse cette image de graphique de trading.
-
-Réponds en français avec :
-
-📌 Actif détecté
-📈 Tendance
-📊 Structure du marché
-🟢 BUY ou 🔴 SELL
-🎯 Entrée
-🛑 Stop Loss
-✅ TP1
-✅ TP2
-📈 Confiance %
-"""
-
-
-        # Appel IA
 
         result = client.image_to_text(
             image,
@@ -105,7 +87,21 @@ Réponds en français avec :
         )
 
 
+        if not result:
+
+            await update.message.reply_text(
+                "⚠️ L'IA n'a retourné aucune analyse."
+            )
+
+            return
+
+
         description = result[0].generated_text
+
+
+        if not description:
+
+            description = "Aucune description reçue."
 
 
         await update.message.reply_text(
