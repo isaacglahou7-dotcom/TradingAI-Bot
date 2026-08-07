@@ -1,6 +1,6 @@
 python-telegram-bot==21.6
 python-dotenv
+aiohttp
 requests
 Pillow
-aiohttp
-huggingface_hub
+google-generativeai
