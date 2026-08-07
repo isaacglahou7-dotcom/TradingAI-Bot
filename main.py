@@ -20,10 +20,21 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def analyse_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "📊 Image reçue !\n\n"
-        "🔎 Analyse du graphique en cours..."
+        "🔎 Téléchargement du graphique..."
     )
 
-    # Intelligence artificielle sera ajoutée ici
+    photo = update.message.photo[-1]
+
+    file = await context.bot.get_file(photo.file_id)
+
+    image_path = "graphique.png"
+
+    await file.download_to_drive(image_path)
+
+    await update.message.reply_text(
+        "✅ Graphique enregistré.\n\n"
+        "🧠 Prêt pour l'analyse IA."
+    )
 
 
 app = ApplicationBuilder().token(TOKEN).build()
