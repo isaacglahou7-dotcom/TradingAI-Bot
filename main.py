@@ -38,7 +38,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(
         "🤖 Trading AI Bot en ligne !\n\n"
-        "📸 Envoie-moi ton graphique.\n\n"
+        "📸 Envoie ton graphique.\n\n"
         "Je vais analyser :\n"
         "📈 Tendance\n"
         "🎯 Entrée\n"
@@ -49,14 +49,14 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 # =========================
-# IMAGE ANALYSE
+# ANALYSE IMAGE
 # =========================
 
 async def analyse_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(
         "📊 Image reçue !\n\n"
-        "🔎 Téléchargement du graphique..."
+        "🔎 Analyse IA en cours..."
     )
 
 
@@ -66,14 +66,7 @@ async def analyse_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     image_path = "graphique.png"
 
-
     await file.download_to_drive(image_path)
-
-
-    await update.message.reply_text(
-        "✅ Graphique enregistré.\n\n"
-        "🧠 Préparation analyse IA..."
-    )
 
 
     try:
@@ -82,18 +75,61 @@ async def analyse_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
         await update.message.reply_text(
-            "🔍 Image chargée correctement.\n"
-            "🤖 Connexion IA en préparation..."
+            "🖼️ Image chargée.\n"
+            "🧠 Interrogation du modèle IA..."
         )
 
 
-        # Analyse IA sera activée ici
+        prompt = """
+Tu es un analyste professionnel Forex.
+
+Analyse ce graphique de trading.
+
+Donne :
+
+📌 Actif détecté
+📈 Tendance
+📊 Structure du marché
+🟢 BUY ou 🔴 SELL
+🎯 Zone d'entrée
+🛑 Stop Loss
+✅ TP1
+✅ TP2
+📈 Confiance en %
+
+Réponds en français.
+"""
+
+
+        # Préparation image pour IA
+
+        result = client.image_to_text(
+            image,
+            model="Salesforce/blip-image-captioning-large"
+        )
+
+
+        description = result[0].generated_text
+
+
+        analyse = f"""
+📊 ANALYSE IA TRADING
+
+{description}
+
+
+⚠️ Analyse graphique avancée en préparation.
+Le modèle vision actuel sert de base.
+"""
+
+
+        await update.message.reply_text(analyse)
 
 
     except Exception as e:
 
         await update.message.reply_text(
-            f"❌ Erreur analyse image :\n{e}"
+            f"❌ Erreur IA :\n{e}"
         )
 
 
@@ -107,7 +143,6 @@ async def health_check(request):
     return web.Response(
         text="Trading AI Bot OK"
     )
-
 
 
 async def start_web_server():
