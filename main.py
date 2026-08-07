@@ -76,32 +76,28 @@ async def analyse_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         await update.message.reply_text(
             "🖼️ Image chargée.\n"
-            "🧠 Interrogation du modèle IA..."
+            "🧠 Connexion au modèle IA..."
         )
 
 
         prompt = """
-Tu es un analyste professionnel Forex.
+Analyse cette image de graphique de trading.
 
-Analyse ce graphique de trading.
-
-Donne :
+Réponds en français avec :
 
 📌 Actif détecté
 📈 Tendance
 📊 Structure du marché
 🟢 BUY ou 🔴 SELL
-🎯 Zone d'entrée
+🎯 Entrée
 🛑 Stop Loss
 ✅ TP1
 ✅ TP2
-📈 Confiance en %
-
-Réponds en français.
+📈 Confiance %
 """
 
 
-        # Préparation image pour IA
+        # Appel IA
 
         result = client.image_to_text(
             image,
@@ -112,24 +108,18 @@ Réponds en français.
         description = result[0].generated_text
 
 
-        analyse = f"""
-📊 ANALYSE IA TRADING
-
-{description}
-
-
-⚠️ Analyse graphique avancée en préparation.
-Le modèle vision actuel sert de base.
-"""
-
-
-        await update.message.reply_text(analyse)
+        await update.message.reply_text(
+            "🧠 ANALYSE IA :\n\n"
+            + description
+        )
 
 
     except Exception as e:
 
         await update.message.reply_text(
-            f"❌ Erreur IA :\n{e}"
+            "❌ Erreur IA :\n"
+            f"{type(e).__name__}\n"
+            f"{str(e)}"
         )
 
 
