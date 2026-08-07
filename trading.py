@@ -3,14 +3,17 @@
 # =========================
 
 
-def format_analyse(resultat):
+def format_analyse(analyse):
 
-    return f"""
-📊 ANALYSE TRADING AI PRO
+    message = f"""
+🤖 Trading AI Bot PRO
 
-{resultat}
+{analyse}
 
-
+━━━━━━━━━━━━━━
 ⚠️ Ceci est une analyse automatique.
-Toujours vérifier avant de prendre une position.
+Le marché peut changer rapidement.
+Toujours vérifier avant une entrée.
 """
+
+    return message
