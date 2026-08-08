@@ -1,178 +1,363 @@
-from PIL import Image
 import cv2
 import numpy as np
 
 from trading import format_analyse
 
 
+# ============================================================
+# OUTILS
+# ============================================================
 
-# =========================
-# ANALYSE GRAPHIQUE LOCALE
-# =========================
+def clamp(value, minimum, maximum):
+    return max(minimum, min(value, maximum))
+
+
+def analyse_structure(gray):
+    """
+    Analyse grossière de la structure visuelle du graphique.
+    Cette fonction ne prétend pas connaître le prix réel.
+    """
+
+    height, width = gray.shape
+
+    # On travaille principalement sur la partie centrale
+    # pour éviter une partie de l'interface autour du graphique.
+    x1 = int(width * 0.05)
+    x2 = int(width * 0.95)
+
+    y1 = int(height * 0.05)
+    y2 = int(height * 0.95)
+
+    chart = gray[y1:y2, x1:x2]
+
+    if chart.size == 0:
+        return None
+
+    # Réduction du bruit
+    blurred = cv2.GaussianBlur(
+        chart,
+        (5, 5),
+        0
+    )
+
+    # Détection des contours
+    edges = cv2.Canny(
+        blurred,
+        50,
+        150
+    )
+
+    # Projection horizontale des contours.
+    # Cela permet d'obtenir une indication de la répartition
+    # verticale des éléments du graphique.
+    horizontal_activity = np.sum(
+        edges,
+        axis=1
+    )
+
+    if len(horizontal_activity) < 10:
+        return None
+
+    # Découpage en plusieurs zones verticales
+    sections = np.array_split(
+        horizontal_activity,
+        5
+    )
+
+    values = [
+        float(np.mean(section))
+        for section in sections
+    ]
+
+    # Comparaison des zones supérieures et inférieures
+    upper = np.mean(values[:2])
+    middle = values[2]
+    lower = np.mean(values[-2:])
+
+    # Cette estimation est volontairement prudente.
+    difference = lower - upper
+
+    if difference > 3:
+        direction = "Haussière probable 📈"
+        signal = "BUY 🟢"
+
+    elif difference < -3:
+        direction = "Baissière probable 📉"
+        signal = "SELL 🔴"
+
+    else:
+        direction = "Neutre / marché indécis ⚪"
+        signal = "ATTENDRE ⏳"
+
+    return {
+        "direction": direction,
+        "signal": signal,
+        "activity": values,
+        "middle": middle
+    }
+
+
+def detect_levels(gray):
+    """
+    Détection de niveaux horizontaux visuels.
+    Ces niveaux sont exprimés en pixels et PAS en prix.
+    """
+
+    edges = cv2.Canny(
+        gray,
+        50,
+        150
+    )
+
+    lines = cv2.HoughLinesP(
+        edges,
+        1,
+        np.pi / 180,
+        threshold=80,
+        minLineLength=max(
+            50,
+            gray.shape[1] // 5
+        ),
+        maxLineGap=15
+    )
+
+    horizontal_levels = []
+
+    if lines is None:
+        return horizontal_levels
+
+    for line in lines:
+
+        x1, y1, x2, y2 = line[0]
+
+        # Ligne presque horizontale
+        if abs(y2 - y1) <= 3:
+
+            y = int((y1 + y2) / 2)
+
+            horizontal_levels.append(y)
+
+    # Regroupement des niveaux proches
+    horizontal_levels.sort()
+
+    grouped = []
+
+    for level in horizontal_levels:
+
+        if not grouped:
+
+            grouped.append(level)
+
+        elif abs(level - grouped[-1]) > 12:
+
+            grouped.append(level)
+
+    return grouped
+
+
+def confidence_from_structure(structure):
+
+    if not structure:
+        return 50
+
+    activity = structure["activity"]
+
+    if not activity:
+        return 50
+
+    spread = float(
+        np.std(activity)
+    )
+
+    confidence = 50 + int(
+        clamp(
+            spread * 2,
+            0,
+            30
+        )
+    )
+
+    return clamp(
+        confidence,
+        50,
+        80
+    )
+
+
+# ============================================================
+# ANALYSE PRINCIPALE
+# ============================================================
 
 async def analyse_graphique(image_path):
 
     try:
 
-        img = cv2.imread(image_path)
+        image = cv2.imread(
+            image_path
+        )
 
-        if img is None:
-            return "❌ Image impossible à analyser."
+        if image is None:
+
+            return (
+                "❌ Impossible de lire "
+                "le graphique."
+            )
 
 
-        height, width = img.shape[:2]
+        height, width = image.shape[:2]
 
-
-        # Conversion niveaux de gris
 
         gray = cv2.cvtColor(
-            img,
+            image,
             cv2.COLOR_BGR2GRAY
         )
 
 
-        # Détection contours
+        # ----------------------------------------------------
+        # STRUCTURE
+        # ----------------------------------------------------
 
-        edges = cv2.Canny(
-            gray,
-            50,
-            150
+        structure = analyse_structure(
+            gray
         )
 
 
-        # Analyse des zones du graphique
+        if structure is None:
 
-        top_zone = gray[:height//2]
-        bottom_zone = gray[height//2:]
-
-
-        top_average = np.mean(top_zone)
-        bottom_average = np.mean(bottom_zone)
+            return (
+                "⚠️ Graphique insuffisant "
+                "pour effectuer une analyse."
+            )
 
 
+        direction = structure[
+            "direction"
+        ]
 
-        # Détermination tendance
-
-        if bottom_average > top_average:
-
-            tendance = "Haussière 📈"
-            signal = "BUY 🟢"
-
-            direction = 1
-
-        else:
-
-            tendance = "Baissière 📉"
-            signal = "SELL 🔴"
-
-            direction = -1
+        signal = structure[
+            "signal"
+        ]
 
 
-
-        # Estimation volatilité
-
-        volatilite = np.std(gray)
-
-
-        confiance = int(
-            min(
-                85,
-                max(
-                    55,
-                    volatilite
-                )
+        confidence = (
+            confidence_from_structure(
+                structure
             )
         )
 
 
+        # ----------------------------------------------------
+        # NIVEAUX VISUELS
+        # ----------------------------------------------------
 
-        # Prix fictif basé sur l'image
-        # (sera remplacé par vraie lecture graphique plus tard)
+        levels = detect_levels(
+            gray
+        )
 
-        prix_reference = 100
 
+        # ----------------------------------------------------
+        # PRIX
+        # ----------------------------------------------------
 
-        if direction == 1:
+        # IMPORTANT :
+        #
+        # Nous ne connaissons pas encore la correspondance
+        # pixel -> prix.
+        #
+        # Il est donc INTERDIT d'inventer un prix.
+        #
+        # Exemple interdit :
+        # entrée = 100
+        # SL = 102
+        #
+        # On affiche donc les niveaux en pixels uniquement
+        # jusqu'à ce qu'une vraie échelle de prix soit lue.
+        # ----------------------------------------------------
 
-            entree = prix_reference
+        if levels:
 
-            sl = entree - 2
-
-            tp1 = entree + 2
-
-            tp2 = entree + 4
-
-            tp3 = entree + 6
-
+            level_text = (
+                f"{len(levels)} niveau(x) "
+                "horizontal(aux) détecté(s)."
+            )
 
         else:
 
-            entree = prix_reference
-
-            sl = entree + 2
-
-            tp1 = entree - 2
-
-            tp2 = entree - 4
-
-            tp3 = entree - 6
+            level_text = (
+                "Aucun niveau horizontal "
+                "fiable détecté."
+            )
 
 
+        # ----------------------------------------------------
+        # ANALYSE
+        # ----------------------------------------------------
 
         analyse = f"""
-
 📊 ANALYSE TRADING AI PRO
 
+🖼️ Graphique détecté
 
-🖼️ Graphique détecté :
-
-Dimension :
-{width}px x {height}px
+Résolution :
+{width}px × {height}px
 
 
 📈 Tendance :
-
-{tendance}
+{direction}
 
 
 🎯 Signal :
-
 {signal}
 
 
-📍 Zone d'entrée :
-
-{entree}
-
-
-🛑 Stop Loss :
-
-{sl}
+📍 Structure :
+{level_text}
 
 
-✅ Take Profit :
-
-TP1 : {tp1}
-
-TP2 : {tp2}
-
-TP3 : {tp3}
+📊 Confiance structurelle :
+{confidence}%
 
 
+🧠 Analyse :
 
-📊 Confiance :
-
-{confiance}%
-
-
-🔎 Analyse technique :
-
-- Structure du mouvement détectée
-- Volatilité analysée
-- Direction probable identifiée
+Le moteur a analysé la structure
+visuelle du graphique et les éléments
+horizontaux détectables.
 
 
-⚠️ Toujours confirmer avant une prise de position.
+💰 PRIX RÉEL :
+
+⚠️ Prix non détecté.
+
+L'échelle de prix n'est pas encore
+suffisamment lisible pour convertir
+les coordonnées de l'image en prix réel.
+
+
+🛑 STOP LOSS :
+Non calculé.
+
+
+✅ TP1 :
+Non calculé.
+
+
+✅ TP2 :
+Non calculé.
+
+
+✅ TP3 :
+Non calculé.
+
+
+⚠️ IMPORTANT :
+
+Aucun prix n'est inventé.
+
+Pour calculer correctement l'entrée,
+le SL et les TP, le moteur doit pouvoir
+lire l'échelle de prix du graphique ou
+recevoir les données OHLC.
 """
 
 
@@ -182,7 +367,6 @@ TP3 : {tp3}
 
 
     except Exception as e:
-
 
         return (
             "❌ Erreur analyse technique :\n"
