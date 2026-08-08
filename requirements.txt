@@ -4,3 +4,4 @@ aiohttp
 Pillow
 opencv-python-headless
 numpy
+pytesseract
