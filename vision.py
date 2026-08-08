@@ -1,174 +1,158 @@
 import cv2
 import numpy as np
-
 from trading import format_analyse
-
-
 # ============================================================
 # OUTILS
 # ============================================================
-
 def clamp(value, minimum, maximum):
     return max(minimum, min(value, maximum))
-
-
+# ============================================================
+# ANALYSE DE STRUCTURE
+# ============================================================
 def analyse_structure(gray):
-    """
-    Analyse grossière de la structure visuelle du graphique.
-    Cette fonction ne prétend pas connaître le prix réel.
-    """
-
     height, width = gray.shape
-
-    # On travaille principalement sur la partie centrale
-    # pour éviter une partie de l'interface autour du graphique.
     x1 = int(width * 0.05)
     x2 = int(width * 0.95)
-
     y1 = int(height * 0.05)
     y2 = int(height * 0.95)
-
     chart = gray[y1:y2, x1:x2]
-
     if chart.size == 0:
         return None
-
-    # Réduction du bruit
     blurred = cv2.GaussianBlur(
         chart,
         (5, 5),
         0
     )
-
-    # Détection des contours
     edges = cv2.Canny(
         blurred,
         50,
         150
     )
-
-    # Projection horizontale des contours.
-    # Cela permet d'obtenir une indication de la répartition
-    # verticale des éléments du graphique.
     horizontal_activity = np.sum(
         edges,
         axis=1
     )
-
     if len(horizontal_activity) < 10:
         return None
-
-    # Découpage en plusieurs zones verticales
     sections = np.array_split(
         horizontal_activity,
         5
     )
-
     values = [
         float(np.mean(section))
         for section in sections
     ]
-
-    # Comparaison des zones supérieures et inférieures
-    upper = np.mean(values[:2])
-    middle = values[2]
-    lower = np.mean(values[-2:])
-
-    # Cette estimation est volontairement prudente.
+    upper = float(
+        np.mean(values[:2])
+    )
+    middle = float(
+        values[2]
+    )
+    lower = float(
+        np.mean(values[-2:])
+    )
     difference = lower - upper
-
     if difference > 3:
         direction = "Haussière probable 📈"
         signal = "BUY 🟢"
-
     elif difference < -3:
         direction = "Baissière probable 📉"
         signal = "SELL 🔴"
-
     else:
         direction = "Neutre / marché indécis ⚪"
         signal = "ATTENDRE ⏳"
-
     return {
         "direction": direction,
         "signal": signal,
         "activity": values,
         "middle": middle
     }
-
-
+# ============================================================
+# DETECTION DES NIVEAUX
+# ============================================================
 def detect_levels(gray):
-    """
-    Détection de niveaux horizontaux visuels.
-    Ces niveaux sont exprimés en pixels et PAS en prix.
-    """
-
     edges = cv2.Canny(
         gray,
         50,
         150
     )
-
+    min_line_length = max(
+        50,
+        gray.shape[1] // 5
+    )
     lines = cv2.HoughLinesP(
         edges,
         1,
         np.pi / 180,
         threshold=80,
-        minLineLength=max(
-            50,
-            gray.shape[1] // 5
-        ),
+        minLineLength=min_line_length,
         maxLineGap=15
     )
-
     horizontal_levels = []
-
     if lines is None:
         return horizontal_levels
-
-    for line in lines:
-
-        x1, y1, x2, y2 = line[0]
-
-        # Ligne presque horizontale
-        if abs(y2 - y1) <= 3:
-
-            y = int((y1 + y2) / 2)
-
-            horizontal_levels.append(y)
-
-    # Regroupement des niveaux proches
+    # Convertit proprement le résultat OpenCV
+    # en tableau de lignes.
+    lines = np.asarray(lines)
+    try:
+        # Format classique :
+        # (N, 1, 4)
+        if lines.ndim == 3:
+            lines = lines.reshape(
+                -1,
+                4
+            )
+        # Autre format possible :
+        # (N, 4)
+        elif lines.ndim == 2:
+            if lines.shape[1] != 4:
+                return horizontal_levels
+        else:
+            return horizontal_levels
+        for line in lines:
+            if len(line) != 4:
+                continue
+            x1, y1, x2, y2 = [
+                int(value)
+                for value in line
+            ]
+            # Ligne presque horizontale
+            if abs(y2 - y1) <= 3:
+                y = int(
+                    (y1 + y2) / 2
+                )
+                horizontal_levels.append(
+                    y
+                )
+    except Exception:
+        return horizontal_levels
     horizontal_levels.sort()
-
     grouped = []
-
     for level in horizontal_levels:
-
         if not grouped:
-
             grouped.append(level)
-
-        elif abs(level - grouped[-1]) > 12:
-
+        elif abs(
+            level - grouped[-1]
+        ) > 12:
             grouped.append(level)
-
     return grouped
-
-
-def confidence_from_structure(structure):
-
+# ============================================================
+# CONFIANCE
+# ============================================================
+def confidence_from_structure(
+    structure
+):
     if not structure:
         return 50
-
-    activity = structure["activity"]
-
+    activity = structure.get(
+        "activity",
+        []
+    )
     if not activity:
         return 50
-
     spread = float(
         np.std(activity)
     )
-
     confidence = 50 + int(
         clamp(
             spread * 2,
@@ -176,198 +160,118 @@ def confidence_from_structure(structure):
             30
         )
     )
-
-    return clamp(
-        confidence,
-        50,
-        80
+    return int(
+        clamp(
+            confidence,
+            50,
+            80
+        )
     )
-
-
 # ============================================================
 # ANALYSE PRINCIPALE
 # ============================================================
-
-async def analyse_graphique(image_path):
-
+async def analyse_graphique(
+    image_path
+):
     try:
-
         image = cv2.imread(
             image_path
         )
-
         if image is None:
-
             return (
                 "❌ Impossible de lire "
                 "le graphique."
             )
-
-
         height, width = image.shape[:2]
-
-
         gray = cv2.cvtColor(
             image,
             cv2.COLOR_BGR2GRAY
         )
-
-
         # ----------------------------------------------------
         # STRUCTURE
         # ----------------------------------------------------
-
         structure = analyse_structure(
             gray
         )
-
-
         if structure is None:
-
             return (
                 "⚠️ Graphique insuffisant "
                 "pour effectuer une analyse."
             )
-
-
-        direction = structure[
-            "direction"
-        ]
-
-        signal = structure[
-            "signal"
-        ]
-
-
+        direction = structure.get(
+            "direction",
+            "Indéterminée"
+        )
+        signal = structure.get(
+            "signal",
+            "ATTENDRE ⏳"
+        )
         confidence = (
             confidence_from_structure(
                 structure
             )
         )
-
-
         # ----------------------------------------------------
-        # NIVEAUX VISUELS
+        # NIVEAUX
         # ----------------------------------------------------
-
         levels = detect_levels(
             gray
         )
-
-
-        # ----------------------------------------------------
-        # PRIX
-        # ----------------------------------------------------
-
-        # IMPORTANT :
-        #
-        # Nous ne connaissons pas encore la correspondance
-        # pixel -> prix.
-        #
-        # Il est donc INTERDIT d'inventer un prix.
-        #
-        # Exemple interdit :
-        # entrée = 100
-        # SL = 102
-        #
-        # On affiche donc les niveaux en pixels uniquement
-        # jusqu'à ce qu'une vraie échelle de prix soit lue.
-        # ----------------------------------------------------
-
         if levels:
-
             level_text = (
                 f"{len(levels)} niveau(x) "
                 "horizontal(aux) détecté(s)."
             )
-
         else:
-
             level_text = (
                 "Aucun niveau horizontal "
                 "fiable détecté."
             )
-
-
         # ----------------------------------------------------
-        # ANALYSE
+        # RESULTAT
         # ----------------------------------------------------
-
         analyse = f"""
 📊 ANALYSE TRADING AI PRO
-
-🖼️ Graphique détecté
-
+🖼️ GRAPHIQUE
 Résolution :
 {width}px × {height}px
-
-
-📈 Tendance :
+📈 TENDANCE
 {direction}
-
-
-🎯 Signal :
+🎯 SIGNAL
 {signal}
-
-
-📍 Structure :
+📍 STRUCTURE
 {level_text}
-
-
-📊 Confiance structurelle :
+📊 CONFIANCE STRUCTURELLE
 {confidence}%
-
-
-🧠 Analyse :
-
-Le moteur a analysé la structure
-visuelle du graphique et les éléments
-horizontaux détectables.
-
-
-💰 PRIX RÉEL :
-
+🧠 ANALYSE TECHNIQUE
+Le moteur a analysé :
+• Structure visuelle
+• Activité du graphique
+• Niveaux horizontaux
+• Direction probable
+💰 PRIX RÉEL
 ⚠️ Prix non détecté.
-
-L'échelle de prix n'est pas encore
-suffisamment lisible pour convertir
-les coordonnées de l'image en prix réel.
-
-
-🛑 STOP LOSS :
+L'échelle de prix doit encore être
+lue correctement avant de calculer
+un prix d'entrée réel.
+🛑 STOP LOSS
 Non calculé.
-
-
-✅ TP1 :
+✅ TP1
 Non calculé.
-
-
-✅ TP2 :
+✅ TP2
 Non calculé.
-
-
-✅ TP3 :
+✅ TP3
 Non calculé.
-
-
-⚠️ IMPORTANT :
-
-Aucun prix n'est inventé.
-
-Pour calculer correctement l'entrée,
-le SL et les TP, le moteur doit pouvoir
-lire l'échelle de prix du graphique ou
-recevoir les données OHLC.
+⚠️ IMPORTANT
+Aucun prix fictif n'est utilisé.
+Le bot ne donnera pas de SL ou TP
+tant qu'il ne peut pas déterminer
+le prix réel du graphique.
 """
-
-
         return format_analyse(
             analyse
         )
-
-
     except Exception as e:
-
         return (
             "❌ Erreur analyse technique :\n"
             f"{type(e).__name__}\n"
